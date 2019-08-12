@@ -8,7 +8,7 @@
 
 void(* resetFunc) (void) = 0;//объявляем функцию reset с адресом 0 (123 from keyb)
 
-const uint64_t pipe[2] = {0x0DEADF00D0LL, 0xF00DF2F3F4LL}; // идентификатор передачи
+const uint64_t pipe[1] = {0x0DEADF00D0LL}; // идентификатор передачи
 
 RF24 radio(9,10);
 
@@ -263,7 +263,6 @@ void RadioSend()
   if(radio.write(&data, sizeof(data)))
   {
     Serial.println(F("TXOK"));
-    sendErrors = 0;
     if (radio.isAckPayloadAvailable()) //got data from controller
     {
     // turn on blue led - sent data success
@@ -272,12 +271,14 @@ void RadioSend()
       setColor(0, 0, 255); // BLUE Color FOR BLINK
       Serial.println(ackdata[0]);
       //Serial.println(ackdata[1]);
+      sendErrors = 0;
     }
     else
     {
     // turn on red led - sent data success but bad ack
-       setColor(255, 255, 0); // bLUE Color FOR BLINK
-       Serial.println(F("BADACK"));
+      sendErrors++;
+      setColor(255, 255, 0); // RG Color FOR BLINK
+      Serial.println(F("BADACK"));
       wrongAcks++;
       if(wrongAcks > 5 )
       {
@@ -294,7 +295,7 @@ void RadioSend()
     Serial.println(sendErrors);
     if(++sendErrors > 30) //30 sec timeout, reset
     {
-      Serial.println("Reset Controller...");
+      Serial.println(F("Reset Controller..."));
       delay(100);
       resetFunc();
     }
@@ -342,9 +343,7 @@ void loop()
   if((millis() - radioTime) > radioPeriod)
   { 
     AverageArray();
-
     RadioSend();
-
     ledIsOn = true;
     ledTime = millis(); 
     radioTime = millis();

@@ -35,7 +35,7 @@ void(* resetFunc) (void) = 0;//объявляем функцию reset с адр
 SWTFT tft;
 
 //RADIO
-const uint64_t pipe[2] = {0x0DEADF00D0LL, 0xF00DF2F3F4LL}; // идентификатор передачи
+const uint64_t pipe[1] = {0x0DEADF00D0LL}; // идентификатор передачи
 
 //RF data array
 unsigned int data[3] {0,0,0}; //30 sec average, last sensor reading and  send errors num will be sent by radiomodem (in mm)
@@ -81,12 +81,12 @@ int relayOnEvents = 0;
 unsigned long tryToOnTime = 0;
 
 //piezo beeper
-int Beep = A8;
-int BeepGround = A9;
+int Beep = 62;// A8;
+int BeepGround = 63;//A9;
 
 bool automode = false;
 
-int Relay = A10; 
+int Relay = 64;//A10; 
 bool curRelayState = false;
 
 unsigned int leveltoonrelay = 85;// 85 cmeters 
