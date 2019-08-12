@@ -1,12 +1,10 @@
 #include <SPI.h>      // библиотека для протокола SPI
 #include <nRF24L01.h> // библиотека для nRF24L01+
 #include <RF24.h>     // библиотека для радио модуля
-//#include <printf.h>
-
-
 //Laser sensor
 #include <Wire.h>
 #include <vl53l1_api.h>
+//#include <printf.h>
 
 void(* resetFunc) (void) = 0;//объявляем функцию reset с адресом 0 (123 from keyb)
 
@@ -15,11 +13,10 @@ const uint64_t pipe[2] = {0x0DEADF00D0LL, 0xF00DF2F3F4LL}; // идентифик
 RF24 radio(9,10);
 
 unsigned long radioTime;
-unsigned long radioPeriod = 250; //ms
+unsigned long radioPeriod = 333; //ms 3 radio packet per second
 //data for send to radio
 unsigned int data[3] = {0,0,0};
 byte ackdata[2] {0,0};
-
 
 // RANGING SENSOR
 VL53L1_Dev_t sensor;
@@ -30,7 +27,6 @@ int status;
 bool sensorError = false;
 //sensor reading timer
 unsigned long laserReadsPeriod = 1000; //in milliseconds, 1 second by default, sensor internal timer
-
 
 //RGB led
 int redPin= A0;
