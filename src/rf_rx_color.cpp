@@ -38,11 +38,19 @@ SWTFT tft;
 const uint64_t pipe[1] = {0x0DEADF00D0LL}; // идентификатор передачи
 
 //RF data array
-unsigned int data[3] {0,0,0}; //30 sec average, last sensor reading and  send errors num will be sent by radiomodem (in mm)
+//unsigned int data[3] {0,0,0}; //30 sec average, last sensor reading and  send errors num will be sent by radiomodem (in mm)
+struct senddata
+{
+    unsigned int level;
+    unsigned int lastread;
+    float ambient;
+    float signal;
+};
+senddata data;
 byte ackdata[2] {3,0};
 
-int SensorErrors = 0;
-int MaxErrors = 15; //
+unsigned int SensorErrors = 0;
+int MaxErrors = 30; //
 bool IgnoreSensorError = false;
 unsigned long wlevel = 0;
 bool sensorActive = false;
@@ -350,7 +358,8 @@ void DisplayStatus()
           tft.setCursor(80,5); // установка позиции курсора
           tft.print(wlevel);
           if(wlevel<100)
-            tft.print(" "); 
+            tft.print("  "); 
+           // Serial.println(wlevel);
           //tft.setTextColor(BLACK,WHITE);
           //tft.setTextSize(6);  // установка размера шрифта
           //tft.println(utf8rus("с"));
@@ -376,13 +385,18 @@ void DisplayStatus()
 
           tft.setTextSize(4);  // установка размера шрифта
           tft.setCursor(80,154); // установка позиции курсора
+    
           if(minutes>0)
           {
             if(minutes<10)
             tft.print("0"); 
             tft.print(minutes); 
             tft.print(utf8rus(F(":")));
-          } 
+          } else
+          {
+            tft.print("00"); 
+            tft.print(utf8rus(F(":")));
+          }
           if(seconds>0)
           {
             if(seconds<10)
@@ -390,18 +404,19 @@ void DisplayStatus()
             tft.print(seconds); 
             //tft.print(utf8rus(" "));
           } 
-            if(seconds==0)
+          if(seconds==0)
           {
             tft.print(F("00"));
             //tft.print(utf8rus(" "));
           } 
-
+    
           tft.println("");
          } 
          else
           {
             tft.setTextColor(BLACK,WHITE);
             tft.println(utf8rus(F("ВЫКЛ ")));
+            tft.fillRect(80,154,130,30,WHITE); //timer box
           }
         }
        if(SensorErrors>5 && automode) 
@@ -678,26 +693,31 @@ void ReadRadio()
     radio.writeAckPayload(1, &ackdata, sizeof(ackdata) ); // prep the ack payload for next read
     radio.read(&data, sizeof(data)); // читаем данные
 
-    if(data[0]>0)
+    //Serial.println("RA");
+    //Serial.println("RA");
+    //clean lower info box
+    tft.fillRect(5,230,250,10,WHITE);
+
+    if(data.level!=0)
     {
-      wlevel = data[0]/10; //convert to CM from received MM
+      wlevel = data.level/10; //convert to CM from received MM
       SensorErrors = 0; 
       sensorActive = true;
       IgnoreSensorError = false;
     
       tft.fillCircle(300,20,12,GREEN);
-
       tft.setCursor (5, 230);
 
       tft.setTextSize (1);
       tft.setTextColor(BLACK);
       tft.print(utf8rus(F("УР:")));
-      tft.print(data[0]);
+      tft.print(data.level);
       tft.print(utf8rus(F(" ПОСЛ:")));
-      tft.print(data[1]);
-      tft.print(utf8rus(F(" ОШ:")));
-      tft.println(data[2]);
-  
+      tft.print(data.lastread);
+      tft.print(utf8rus(F(" СИГ:")));
+      tft.print(data.signal);
+      tft.print(utf8rus(F(" ШУМ:")));
+      tft.println(data.ambient);
       tft.fillRect(290,230,30,10,WHITE);
 
     }
@@ -705,28 +725,26 @@ void ReadRadio()
     {
       SensorErrors++;
       tft.fillCircle(300,20,12,YELLOW);
-  
       tft.fillRect(290,230,30,10,WHITE);
-  
       tft.setCursor (5, 230);
       tft.setTextSize (1);
       tft.setTextColor(BLACK);
-      tft.print(F("Zero data!!!        "));
+      tft.print(utf8rus(F("Уровень 0!!!")));
     }
     radiotimenow = millis();
   } 
   else 
   {
-     if(millis() - radiotimenow > 1000) //red if no data for 1 second 
+    if(millis() - radiotimenow > 1000) //red if no data for 1 second 
     {
+      SensorErrors++;
       //Serial.println("!RA");
       //radio.whatHappened
-      SensorErrors++;
       tft.fillCircle(300,20,12,RED);
       tft.setCursor (5, 230);
       tft.setTextSize (1);
       tft.setTextColor(BLACK);
-      tft.print(utf8rus(F("Нет радио сигнала ")));
+      tft.print(utf8rus(F("Нет связи с датчиком")));
       tft.fillRect(290,230,30,10,WHITE);
       tft.setTextColor(BLACK);
       tft.setCursor(290, 230);
@@ -736,7 +754,6 @@ void ReadRadio()
   }
   if(SensorErrors >= MaxErrors) 
   {
-    //zero data
     sensorActive = false;
     wlevel = 0;
   }
