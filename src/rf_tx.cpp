@@ -4,8 +4,6 @@
 #include <VL53L1X.h>
 #include "SoftwareSerial.h"
 
-
-
 //lora serial module
 SoftwareSerial mySerial(10, 9); // RX, TX
 
@@ -20,21 +18,11 @@ struct senddata
     float signal;
 };
 senddata data;
-//unsigned int data[3] = {0,0,0};
-//byte ackdata[2] {0,0};
-
-// RANGING SENSOR
-//VL53L1_Dev_t sensor;
-//VL53L1_DEV   Sensor = &sensor;
-//I2C: A4(SDA) and A5(SCL)
 
 int status;
 bool sensorError = false;
 //sensor reading timer
 unsigned long laserReadsPeriod = 2000; //in milliseconds, 2 second by default, sensor internal timer
-
-//Mpins
-//int mPin= A3;
 
 //RGB led
 int redPin= A0;
@@ -46,9 +34,6 @@ bool ledIsOn = false;
 unsigned long ledTime;
 unsigned long ledPeriod = 250; //ms
 bool ledState = true;
-//rgb led light level
-//int dim = 1;
-
 
 const int WINDOW_SIZE = 10;
 static unsigned long readings[WINDOW_SIZE];      // the readings from sensor
@@ -90,99 +75,19 @@ bool sensorInit()
   // inter-measurement period). This period should be at least as long as the
   // timing budget.
   sensor.startContinuous(laserReadsPeriod);
-
-  /*uint8_t byteData;
-  uint16_t wordData;
-  sensor.I2cDevAddr = 0x52;
-  Serial.println(F("VL53L1X Resetting()"));
-  VL53L1_software_reset(Sensor);
-
-  //if(VL53L1_software_reset(Sensor)!=VL53L1_ERROR_NONE)
- // {
- //   sensorError = true;
- //   Serial.println(F("VL53L1X Reset Failed!!!"));
- //   return false;
- // }
-  Serial.println(F("VL53L1X Reset Done"));
-  status = VL53L1_RdByte(Sensor, 0x010F, &byteData);
-  Serial.print(F("VL53L1X Model_ID: "));
-  Serial.println(byteData, HEX);
-  VL53L1_RdByte(Sensor, 0x0110, &byteData);
-  Serial.print(F("VL53L1X Module_Type: "));
-  Serial.println(byteData, HEX);
-  VL53L1_RdWord(Sensor, 0x010F, &wordData);
-  Serial.print(F("VL53L1X: "));
-  Serial.println(wordData, HEX);
-  Serial.println(F("Ranging Measurement setup..."));
-  VL53L1_WaitDeviceBooted(Sensor);
-  
-  VL53L1_DataInit(Sensor);
-  VL53L1_StaticInit(Sensor);
-  status = VL53L1_SetDistanceMode(Sensor, VL53L1_DISTANCEMODE_MEDIUM);
-  //VL53L1_CalibrationData_t cData;
-  //status = VL53L1_GetCalibrationData(Sensor,&cData);
-  //Serial.print(F("cdataX: "));
-  //Serial.print((int32_t)cData.optical_centre.x_centre);
-  //Serial.print(F("\tcdataY: "));
-  //Serial.println((int32_t)cData.optical_centre.y_centre);
-  // 0,15
-  //
-  //
-  //
-  //
-  // 0,0                15,0
-// n4 x5 y10
-// n5 x4 y11
-// n6 x3 y12
-//
-  VL53L1_UserRoi_t roiConfig;
-  //4x4
-  //roiConfig.TopLeftX = 5;
-  //roiConfig.TopLeftY = 10;
-  //roiConfig.BotRightX = 10;
-  //roiConfig.BotRightY = 5;
-  //5x5 SPAD matrix
-  roiConfig.TopLeftX = 4;
-  roiConfig.TopLeftY = 11;
-  roiConfig.BotRightX = 11;
-  roiConfig.BotRightY = 4;
-  //6x6
-  //roiConfig.TopLeftX = 3;
-  //roiConfig.TopLeftY = 12;
-  //roiConfig.BotRightX = 12;
-  //roiConfig.BotRightY = 3;
-  //8x8
-
-  status = VL53L1_SetUserROI(Sensor, &roiConfig);
-  status = VL53L1_SetMeasurementTimingBudgetMicroSeconds(Sensor, laserReadsPeriod * 100);
-  status = VL53L1_SetInterMeasurementPeriodMilliSeconds(Sensor, laserReadsPeriod);
-  //status = VL53L1X_SetLimitCheckEnable(&Sensor, VL53L1X_CHECKENABLE_SIGNAL_RATE_FINAL_RANGE, 1);
-  //status = VL53L1X_SetLimitCheckValue(&Sensor, VL53L1X_CHECKENABLE_SIGNAL_RATE_FINAL_RANGE, 0.40*65536);
-  status = VL53L1_StartMeasurement(Sensor);
-  Serial.println(F("VL53L1_StartMeasurement success"));
-  */
- return true;
+  return true;
 }
-
-
-
-//
-//
-//
-// RADIO
-//
-//
-//
-//
 
 void radioInit() 
 {
-  Serial.println( "Wireless init begin..." );
+  Serial.println( "Wireless init begin..." ); 
+  //set M0 and M1 pins to 0
       pinMode(11, OUTPUT);
       pinMode(13, OUTPUT);
       digitalWrite(11, LOW);
       digitalWrite(13, LOW);
   Serial.println( "Wireless initialized!" );
+  delay(200);//let radiomodule time to change mode
   //radio.printDetails();
 }
 

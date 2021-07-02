@@ -1,41 +1,14 @@
-//#include <printf.h>
 #include <arduino.h>
 #include <EEPROM.h>
 #include <SPI.h>
-//#include <nRF24L01.h> // библиотека для nRF24L01+
-//#include <RF24.h>     // библиотека для радио модуля
 #include <Keypad.h> //keypad lib
 #include "SWTFT.h" // Hardware-specific library
 #include <Adafruit_GFX.h>    // Core graphics library
-
 #include "SoftwareSerial.h"
-//#include <LoRa_E32.h>
-//
-//
-//Arduino           MEGA
-//10 - SD_SS        53      CS
-//11 - SD-D1        51      MOSI
-//12 - SD_D0        50      MISO
-//13 - SD_SCK       52      CLK
-//
-//  RF24(uint16_t _cepin, uint16_t _cspin);
 
-//LoRa_E32(byte rxPin, byte txPin, byte auxPin, byte m0Pin, byte m1Pin, UART_BPS_RATE bpsRate = UART_BPS_RATE_9600);
-//SoftwareSerial mySerial(50, 53); // RX, TX
-//LoRa_E32 radio(SoftwareSerial* serial, byte auxPin, byte m0Pin, byte m1Pin, UART_BPS_RATE bpsRate = UART_BPS_RATE_9600);
-//LoRa_E32 radio(&Serial3, -1, 23, 25,  UART_BPS_RATE_9600);
+void(* resetFunc) (void) = 0;//reset (123 from keyb)
 
-
-//Mpins
-//int mPin= 22;
-
-//LoRa_E32 radio(&Serial3,  UART_BPS_RATE_9600);
-
-//RF24 radio(49,53); 
-
-SoftwareSerial mySerial(10, 11); // RX, TX
-
-void(* resetFunc) (void) = 0;//объявляем функцию reset с адресом 0 (123 from keyb)
+SoftwareSerial mySerial(10, 11); // RX, TX lora serial module
 
 // Assign human-readable names to some common 16-bit color values:
 #define	BLACK   0x0000
@@ -50,7 +23,7 @@ void(* resetFunc) (void) = 0;//объявляем функцию reset с адр
 
 SWTFT tft;
 
-//RF received data array
+//received data struct
 struct senddata
 {
     unsigned int level;
@@ -58,7 +31,7 @@ struct senddata
     float ambient;
     float signal;
 };
-byte ackdata[2] {3,0};
+byte ackdata = 0;
 
 unsigned int SensorErrors = 0;
 int MaxErrors = 6; //
@@ -624,59 +597,41 @@ void keypadEvent(KeypadEvent key)
 }
 void radioInit() 
 {
-
- Serial.println( "Wireless init begin..." );
-
-
-      pinMode(22, OUTPUT);
-      pinMode(23, OUTPUT);
-      digitalWrite(22, LOW);
-      digitalWrite(23, LOW);
-
-  delay(1000);
-   Serial.println( "Wireless initialized!" );
+  Serial.println( "Wireless init begin..." );
+  pinMode(22, OUTPUT);
+  pinMode(23, OUTPUT);
+  digitalWrite(22, LOW);
+  digitalWrite(23, LOW);
+  delay(250);
+  Serial.println( "Wireless initialized!" );
   tone(Beep, 4000, 100); 
-  
 }
 
 void setup() 
 {
-    Serial.begin(115200);  // включаем последовательный порт
-    mySerial.begin(2400);
-
-
+    Serial.begin(115200);  // debug port
+    mySerial.begin(2400); // lora serial port
     lelevtooffrelay = GetUpLevel(); 
     leveltoonrelay = GetDownLevel();
     automode = GetAutoMode();
-
-
     if(lelevtooffrelay < 30)
       lelevtooffrelay = 30;
-
     if(leveltoonrelay > 199 || leveltoonrelay < lelevtooffrelay)
       leveltoonrelay = 120;
-
     //relay
     pinMode(Relay, OUTPUT);
     digitalWrite(Relay, LOW);//off at start
-  
-    //beep on start
+    //beeper setup
     pinMode(Beep, OUTPUT);
     pinMode(BeepGround, OUTPUT);
     digitalWrite(BeepGround, LOW);
-
-    //пищим
+    //make some noise
     tone(Beep, 1000, 100);
     delay(150);
     tone(Beep, 2000, 100);
     delay(150);
     tone(Beep, 1000, 100);
     delay(150);
-    
-
-  //pinMode( mPin, INPUT_PULLUP );
-  //pinMode( mPin, OUTPUT);
-  //pinMode( mPin, LOW);
 
     radioInit();
        
@@ -695,31 +650,28 @@ void setup()
     keypad.addEventListener(keypadEvent); // добавить слушателя события для данной клавиатуры
 
     timenow = millis(); 
-    //radiotimenow = millis();
     lcdbacktimenow = millis();
 }
 
 void SendRadio()
 {
-  if ( millis() - radiosendtime > radiosendinterval )             // проверяем буфер модема
+  if ( millis() - radiosendtime > radiosendinterval )
   {
-    Serial.println(ackdata[0]);
-    mySerial.print(ackdata[0]);
+    //send current relay state
+    Serial.println(ackdata);
+    mySerial.print(ackdata);
     radiosendtime = millis();
   }
 }
 void ReadRadio()
 {
-  // If something available
+  // If data available
   if (mySerial.available()==sizeof(senddata)) 
   {
-      //Serial.println("Avail");
 	    // read message
       senddata data1;
       if(mySerial.readBytes((char*)&data1, sizeof(senddata)) == sizeof(senddata))
       {
-        
-
         radiotimelastreceived = millis();
         
         tft.fillRect(5,230,300,10,WHITE);
@@ -784,16 +736,14 @@ void ReadRadio()
 void loop() 
 {
   // read keyboard in every loop, we need to do something
-  //char key =
   keypad.getKey();//scan keyboard for events
-
   //relay data for remote side
-  ackdata[0] = curRelayState ? 1  : 0; //2 if 0n, 3 if Off
+  ackdata = curRelayState ? 1  : 0; //2 if 0n, 3 if Off
+
 
   ReadRadio();
   SendRadio();
 
-  
   //beep if no sensor data && !ignore errors
   if(!sensorActive && !IgnoreSensorError)
   {
@@ -804,13 +754,11 @@ void loop()
       lcdbacktimenow =  millis();
     } 
   }
-  //show on display
+  //show on display (1 sec timer)
   if(millis() - timenow > showtime) 
   {
     if(secondsToStop>0)
       secondsToStop--;
-    
-    //GetFlowRate();
     DisplayStatus();
     timenow = millis();
   } 
@@ -827,8 +775,10 @@ void loop()
       relayOnEvents=0;
       RelayOff();          
     }
-  } else 
-  { //manual mode need to check if need stop by timer
+  } 
+  else 
+  { 
+    //in manual mode we only need to check if need to stop by timer
     if(secondsToStop==0 && curRelayState==true)
     { //stop relay by timer
       relayOnEvents  = 0;
