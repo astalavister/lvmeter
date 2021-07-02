@@ -2,11 +2,14 @@
 #include <arduino.h>
 #include <EEPROM.h>
 #include <SPI.h>
-#include <nRF24L01.h> // библиотека для nRF24L01+
-#include <RF24.h>     // библиотека для радио модуля
+//#include <nRF24L01.h> // библиотека для nRF24L01+
+//#include <RF24.h>     // библиотека для радио модуля
 #include <Keypad.h> //keypad lib
 #include "SWTFT.h" // Hardware-specific library
 #include <Adafruit_GFX.h>    // Core graphics library
+
+#include "SoftwareSerial.h"
+//#include <LoRa_E32.h>
 //
 //
 //Arduino           MEGA
@@ -17,7 +20,20 @@
 //
 //  RF24(uint16_t _cepin, uint16_t _cspin);
 
-RF24 radio(49,53); 
+//LoRa_E32(byte rxPin, byte txPin, byte auxPin, byte m0Pin, byte m1Pin, UART_BPS_RATE bpsRate = UART_BPS_RATE_9600);
+//SoftwareSerial mySerial(50, 53); // RX, TX
+//LoRa_E32 radio(SoftwareSerial* serial, byte auxPin, byte m0Pin, byte m1Pin, UART_BPS_RATE bpsRate = UART_BPS_RATE_9600);
+//LoRa_E32 radio(&Serial3, -1, 23, 25,  UART_BPS_RATE_9600);
+
+
+//Mpins
+//int mPin= 22;
+
+//LoRa_E32 radio(&Serial3,  UART_BPS_RATE_9600);
+
+//RF24 radio(49,53); 
+
+SoftwareSerial mySerial(10, 11); // RX, TX
 
 void(* resetFunc) (void) = 0;//объявляем функцию reset с адресом 0 (123 from keyb)
 
@@ -34,11 +50,7 @@ void(* resetFunc) (void) = 0;//объявляем функцию reset с адр
 
 SWTFT tft;
 
-//RADIO
-const uint64_t pipe[1] = {0x0DEADF00D0LL}; // идентификатор передачи
-
-//RF data array
-//unsigned int data[3] {0,0,0}; //30 sec average, last sensor reading and  send errors num will be sent by radiomodem (in mm)
+//RF received data array
 struct senddata
 {
     unsigned int level;
@@ -46,11 +58,10 @@ struct senddata
     float ambient;
     float signal;
 };
-senddata data;
 byte ackdata[2] {3,0};
 
 unsigned int SensorErrors = 0;
-int MaxErrors = 30; //
+int MaxErrors = 6; //
 bool IgnoreSensorError = false;
 unsigned long wlevel = 0;
 bool sensorActive = false;
@@ -74,8 +85,11 @@ unsigned long timenow = 0;
 unsigned long showtime = 1000; 
 
 //time radio read
-unsigned long radiotimenow = 0;
-unsigned long radiointerval = 200; 
+unsigned long radiotimeerrors = 0;
+unsigned long radiotimelastreceived = 0;
+unsigned long radiointerval = 5000; 
+unsigned long radiosendinterval = 5000; 
+unsigned long radiosendtime = 0; 
 
 //beep on error
 unsigned long lcdbacktimenow = 0;
@@ -128,6 +142,7 @@ volatile byte pulseCount;
 
 bool key1pressed = false;
 bool key2pressed = false;
+
 
 //
 void SetAutoMode(bool modeset)
@@ -610,22 +625,16 @@ void keypadEvent(KeypadEvent key)
 void radioInit() 
 {
 
-    radio.begin();
- // printf_begin();
-  delay(100);
+ Serial.println( "Wireless init begin..." );
 
 
-  radio.setChannel(0x55);                 // Установка канала вещания;
-  radio.setDataRate(RF24_1MBPS);          // Установка скорости;
-  radio.setPALevel(RF24_PA_MAX);          // Установка максимальной мощности;
+      pinMode(22, OUTPUT);
+      pinMode(23, OUTPUT);
+      digitalWrite(22, LOW);
+      digitalWrite(23, LOW);
 
-  radio.setAutoAck(true);
-  radio.enableAckPayload();
-  radio.enableDynamicPayloads();
-  radio.openReadingPipe(1,pipe[0]);
-  radio.startListening();
-  radio.setRetries(15,15);
-
+  delay(1000);
+   Serial.println( "Wireless initialized!" );
   tone(Beep, 4000, 100); 
   
 }
@@ -633,8 +642,8 @@ void radioInit()
 void setup() 
 {
     Serial.begin(115200);  // включаем последовательный порт
+    mySerial.begin(2400);
 
-    //printf_begin();
 
     lelevtooffrelay = GetUpLevel(); 
     leveltoonrelay = GetDownLevel();
@@ -664,6 +673,11 @@ void setup()
     tone(Beep, 1000, 100);
     delay(150);
     
+
+  //pinMode( mPin, INPUT_PULLUP );
+  //pinMode( mPin, OUTPUT);
+  //pinMode( mPin, LOW);
+
     radioInit();
        
     tft.reset();
@@ -681,77 +695,85 @@ void setup()
     keypad.addEventListener(keypadEvent); // добавить слушателя события для данной клавиатуры
 
     timenow = millis(); 
-    radiotimenow = millis();
+    //radiotimenow = millis();
     lcdbacktimenow = millis();
 }
 
+void SendRadio()
+{
+  if ( millis() - radiosendtime > radiosendinterval )             // проверяем буфер модема
+  {
+    Serial.println(ackdata[0]);
+    mySerial.print(ackdata[0]);
+    radiosendtime = millis();
+  }
+}
 void ReadRadio()
 {
-  if (radio.available())             // проверяем буфер модема
+  // If something available
+  if (mySerial.available()==sizeof(senddata)) 
   {
-    //Serial.println("RA");
-    radio.writeAckPayload(1, &ackdata, sizeof(ackdata) ); // prep the ack payload for next read
-    radio.read(&data, sizeof(data)); // читаем данные
+      //Serial.println("Avail");
+	    // read message
+      senddata data1;
+      if(mySerial.readBytes((char*)&data1, sizeof(senddata)) == sizeof(senddata))
+      {
+        
 
-    //Serial.println("RA");
-    //Serial.println("RA");
-    //clean lower info box
-    tft.fillRect(5,230,250,10,WHITE);
+        radiotimelastreceived = millis();
+        
+        tft.fillRect(5,230,300,10,WHITE);
 
-    if(data.level!=0)
-    {
-      wlevel = data.level/10; //convert to CM from received MM
-      SensorErrors = 0; 
-      sensorActive = true;
-      IgnoreSensorError = false;
-    
-      tft.fillCircle(300,20,12,GREEN);
-      tft.setCursor (5, 230);
+        if(data1.level!=0)
+        {
+          wlevel = data1.level/10; //convert to CM from received MM
+          Serial.println(wlevel);
+          SensorErrors = 0; 
+          sensorActive = true;
+          IgnoreSensorError = false;
+        
+          tft.fillCircle(300,20,12,GREEN);
+          tft.setCursor (5, 230);
 
-      tft.setTextSize (1);
-      tft.setTextColor(BLACK);
-      tft.print(utf8rus(F("УР:")));
-      tft.print(data.level);
-      tft.print(utf8rus(F(" ПОСЛ:")));
-      tft.print(data.lastread);
-      tft.print(utf8rus(F(" СИГ:")));
-      tft.print(data.signal);
-      tft.print(utf8rus(F(" ШУМ:")));
-      tft.println(data.ambient);
-      tft.fillRect(290,230,30,10,WHITE);
-
-    }
-    else
-    {
-      SensorErrors++;
-      tft.fillCircle(300,20,12,YELLOW);
-      tft.fillRect(290,230,30,10,WHITE);
-      tft.setCursor (5, 230);
-      tft.setTextSize (1);
-      tft.setTextColor(BLACK);
-      tft.print(utf8rus(F("Уровень 0!!!")));
-    }
-    radiotimenow = millis();
+          tft.setTextSize (1);
+          tft.setTextColor(BLACK);
+          tft.print(utf8rus(F("Среднее:")));
+          tft.print(data1.level);
+          tft.print(utf8rus(F(" Показание:")));
+          tft.print(data1.lastread);
+          tft.print(utf8rus(F(" Сигнал:")));
+          tft.print(data1.signal);
+          tft.print(utf8rus(F(" Шум:")));
+          tft.println(data1.ambient);
+          tft.fillRect(290,230,30,10,WHITE);
+        }
+        else
+        {
+          SensorErrors++;
+          tft.fillCircle(300,20,12,YELLOW);
+          tft.fillRect(290,230,30,10,WHITE);
+          tft.setCursor (5, 230);
+          tft.setTextSize (1);
+          tft.setTextColor(BLACK);
+          tft.print(utf8rus(F("Уровень 0!!!")));
+        }
+      } 
+      mySerial.flush();
   } 
-  else 
+  else if (millis() - radiotimelastreceived > 10000 )
   {
-    if(millis() - radiotimenow > 1000) //red if no data for 1 second 
-    {
-      SensorErrors++;
-      //Serial.println("!RA");
-      //radio.whatHappened
-      tft.fillCircle(300,20,12,RED);
-      tft.setCursor (5, 230);
-      tft.setTextSize (1);
-      tft.setTextColor(BLACK);
-      tft.print(utf8rus(F("Нет связи с датчиком")));
-      tft.fillRect(290,230,30,10,WHITE);
-      tft.setTextColor(BLACK);
-      tft.setCursor(290, 230);
-      tft.print(SensorErrors);    
-      radiotimenow =  millis();
-    } 
+    tft.fillRect(5,230,300,10,WHITE);
+    radiotimelastreceived = millis();
+    SensorErrors++;
+    tft.fillCircle(300,20,12,RED);
+    tft.setCursor (5, 230);
+    tft.setTextSize (1);
+    tft.setTextColor(BLACK);
+    tft.print(utf8rus(F("Нет связи с датчиком: ")));
+    tft.print(SensorErrors*10);
+    tft.print(utf8rus(F(" секунд")));
   }
+
   if(SensorErrors >= MaxErrors) 
   {
     sensorActive = false;
@@ -766,11 +788,12 @@ void loop()
   keypad.getKey();//scan keyboard for events
 
   //relay data for remote side
-  ackdata[0] = curRelayState ? 2  : 3; //2 if 0n, 3 if Off
+  ackdata[0] = curRelayState ? 1  : 0; //2 if 0n, 3 if Off
 
-  // always read from modem 
   ReadRadio();
+  SendRadio();
 
+  
   //beep if no sensor data && !ignore errors
   if(!sensorActive && !IgnoreSensorError)
   {
@@ -781,7 +804,6 @@ void loop()
       lcdbacktimenow =  millis();
     } 
   }
-
   //show on display
   if(millis() - timenow > showtime) 
   {
@@ -790,7 +812,6 @@ void loop()
     
     //GetFlowRate();
     DisplayStatus();
-
     timenow = millis();
   } 
   //
