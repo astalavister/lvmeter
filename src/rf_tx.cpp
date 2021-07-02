@@ -1,29 +1,16 @@
 #include <SPI.h>      // библиотека для протокола SPI
-#include <nRF24L01.h> // библиотека для nRF24L01+
-#include <RF24.h>     // библиотека для радио модуля
 //Laser sensor
 #include <Wire.h>
-
-//#include <ComponentObject.h>
-//#include <RangeSensor.h>
-//#include <SparkFun_VL53L1X.h>
-//#include <vl53l1x_class.h>
-//#include <vl53l1_error_codes.h>
-
-//FULL API - doesnt work with SPI
-//#include <vl53l1_api.h>
-
 #include <VL53L1X.h>
-//#include <printf.h>
+#include "SoftwareSerial.h"
 
-void(* resetFunc) (void) = 0;//объявляем функцию reset с адресом 0 (123 from keyb)
 
-const uint64_t pipe[1] = {0x0DEADF00D0LL}; // идентификатор передачи
 
-RF24 radio(9,10);
+//lora serial module
+SoftwareSerial mySerial(10, 9); // RX, TX
 
 unsigned long radioTime;
-unsigned long radioPeriod = 333; //ms 3 radio packet per second
+unsigned long radioPeriod = 5000; //millisecs
 //data for send to radio
 struct senddata
 {
@@ -34,7 +21,7 @@ struct senddata
 };
 senddata data;
 //unsigned int data[3] = {0,0,0};
-byte ackdata[2] {0,0};
+//byte ackdata[2] {0,0};
 
 // RANGING SENSOR
 //VL53L1_Dev_t sensor;
@@ -44,7 +31,10 @@ byte ackdata[2] {0,0};
 int status;
 bool sensorError = false;
 //sensor reading timer
-unsigned long laserReadsPeriod = 1000; //in milliseconds, 1 second by default, sensor internal timer
+unsigned long laserReadsPeriod = 2000; //in milliseconds, 2 second by default, sensor internal timer
+
+//Mpins
+//int mPin= A3;
 
 //RGB led
 int redPin= A0;
@@ -54,51 +44,30 @@ const byte rgbPins[3] = { A0, A1, A2 };
 bool ledIsOn = false;
 //led blink time
 unsigned long ledTime;
-unsigned long ledPeriod = 25; //ms
+unsigned long ledPeriod = 250; //ms
 bool ledState = true;
 //rgb led light level
-int dim = 1;
+//int dim = 1;
 
 
-const int numReadings = 10;
-static unsigned long readings[numReadings];      // the readings from sensor
+const int WINDOW_SIZE = 10;
+static unsigned long readings[WINDOW_SIZE];      // the readings from sensor
 int readIndex = 0;                        // the index of the current reading
-unsigned int avg = 0;
+int readSum = 0;                        // the sum of readings
+
 //unsigned long lastRead = 0;
 //loop counter
 unsigned long sensorTime;
-unsigned long laserReadsInterval = 1000;   // in milliseconds
+unsigned long laserReadsInterval = 2500;   // in milliseconds
 
 unsigned int sendErrors = 0; 
 //unsigned long sendOk = 0; 
 
 byte RemoteState = 0;
-
 int wrongAcks = 0;
-
 VL53L1X sensor;
 //SFEVL53L1X distanceSensor; 
 
-void setColor(int redValue, int greenValue, int blueValue) 
-{
-  analogWrite(redPin, redValue);
-  analogWrite(greenPin, greenValue);
-  analogWrite(bluePin, blueValue);
-}
-
-void AverageArray()
-{
-    unsigned long artotal = 0;
-    for (int thisReading = 0; thisReading < numReadings; thisReading++) 
-    {
-      artotal += readings[thisReading];
-      //Serial.println(artotal);
-    }
-    // calculate the average:
-   // return 
-   avg = artotal / numReadings;  
-   Serial.println(avg);
-}
 bool sensorInit()
 {
 
@@ -106,9 +75,9 @@ bool sensorInit()
   if (!sensor.init())
   {
     Serial.println("Failed to detect and initialize sensor!");
-    while (1);
+    return false;
   } 
-    // Use long distance mode and allow up to 50000 us (50 ms) for a measurement.
+  // Use long distance mode and allow up to 50000 us (50 ms) for a measurement.
   // You can change these settings to adjust the performance of the sensor, but
   // the minimum timing budget is 20 ms for short distance mode and 33 ms for
   // medium and long distance modes. See the VL53L1X datasheet for more
@@ -209,24 +178,12 @@ bool sensorInit()
 void radioInit() 
 {
   Serial.println( "Wireless init begin..." );
-  // Setup
-  radio.begin();
-  delay(100);
-
-  radio.setChannel(0x55);                 // Установка канала вещания;
-  radio.setDataRate(RF24_1MBPS);          // Установка скорости;
-  radio.setPALevel(RF24_PA_MAX);          // Установка максимальной мощности;
-
-  radio.setAutoAck(true);
-  radio.enableAckPayload();
-  radio.enableDynamicPayloads();
-  radio.stopListening();
-  radio.openWritingPipe(pipe[0]);
-  radio.setRetries(15,15);
-
+      pinMode(11, OUTPUT);
+      pinMode(13, OUTPUT);
+      digitalWrite(11, LOW);
+      digitalWrite(13, LOW);
   Serial.println( "Wireless initialized!" );
   //radio.printDetails();
- 
 }
 
 void setup()
@@ -234,88 +191,41 @@ void setup()
   Serial.begin(115200);  // включаем последовательный порт
   //printf_begin();
   Serial.println(F("Controller start..."));
+  mySerial.begin(2400);
+
 
   //for range sensor
   Wire.begin();
   Wire.setClock(400000);
 
-  //spi.begin();      // Soft SPI for RF24
+
+  //pinMode( mPin, OUTPUT);
+
   radioInit();
-  
-  
-    // initialize all the readings to 0:
-  for (int thisReading = 0; thisReading < numReadings; thisReading++)
+  // initialize all the readings to 0:
+  for (int thisReading = 0; thisReading < WINDOW_SIZE; thisReading++)
   {
     readings[thisReading] = 0;
   }
-
   // RGB led
   //Set up the status LED line as an output
   for(byte i=0; i<3; i++)
   {
     pinMode( rgbPins[i], OUTPUT );
   }
-  // начальное состояние - OFF
-  setColor(0,0,0);
-  // printf_begin();
-  //return;   
-  sensorInit();
+  
+  if(!sensorInit())
+    sensorError = true;
 
   Serial.println(F("Controller started...."));
 }
-
-
 void RadioSend()
 {
-    AverageArray();
-    data.level = avg;//radio.stopListening();
-  
-  if(data.level>0){
-
-  if(radio.write(&data, sizeof(data)))
-  {
-//    Serial.println(F("TXOK"));
-    if (radio.isAckPayloadAvailable()) //got data from controller
-    {
-    // turn on blue led - sent data success
-      radio.read(&ackdata, sizeof(ackdata));
-      RemoteState = ackdata[0];
-      setColor(0, 0, 255); // BLUE Color FOR BLINK
-   //   Serial.println(ackdata[0]);
-      //Serial.println(ackdata[1]);
-      sendErrors = 0;
-    }
-    else
-    {
-    // turn on red led - sent data success but bad ack
-      sendErrors++;
-      setColor(255, 255, 0); // RG Color FOR BLINK
-      Serial.println(F("BADACK"));
-      wrongAcks++;
-      if(wrongAcks > 5 )
-      {
-        wrongAcks = 0;
-        RemoteState = 0;
-      }
-    }
-  } 
-  else
-  {
-    RemoteState = 0;
-    setColor(200, 0, 0); // RED Color FOR BLINK
-    Serial.print(F("SErr: "));
-    Serial.println(sendErrors);
-    if(++sendErrors > 30) //30 sec timeout, reset
-    {
-      Serial.println(F("Reset Controller..."));
-      delay(100);
-      resetFunc();
-    }
-  }
-   }
-  //radio.startListening();*/
+    mySerial.write((byte*)&data,sizeof(data));
+    analogWrite(bluePin, 255);
+    ledIsOn = true;
+    ledTime = millis(); 
 }
-
 void ReadSensor()
 {
 
@@ -336,15 +246,21 @@ void ReadSensor()
   Serial.println(avg);*/
   
   //Serial.println(); 
-
+  /*
+const int WINDOW_SIZE = 10;
+static unsigned long readings[WINDOW_SIZE];      // the readings from sensor
+int readIndex = 0;                        // the index of the current reading
+int readSum = 0;                        // the sum of readings
+unsigned int avg = 0;
+*/
   if(!sensor.ranging_data.range_status)
   {
     data.lastread = sensor.ranging_data.range_mm;
-    readings[readIndex] = data.lastread;
-    if (++readIndex >= numReadings)
-    {
-      readIndex = 0;
-    }
+    readSum = readSum - readings[readIndex];// Remove the oldest entry from the sum
+    readings[readIndex] = data.lastread;// Add the newest reading to the window
+    readSum = readSum + data.lastread; // Add the newest reading to the sum
+    readIndex = (readIndex+1) % WINDOW_SIZE;// Increment the index, and wrap to 0 if it exceeds the window size
+    data.level = readSum / WINDOW_SIZE;
     data.ambient = sensor.ranging_data.ambient_count_rate_MCPS;
     data.signal = sensor.ranging_data.peak_signal_count_rate_MCPS;
   //  Serial.print("range: ");
@@ -401,29 +317,13 @@ void loop()
   if((millis() - radioTime) > radioPeriod)
   { 
     RadioSend();
-    ledIsOn = true;
-    ledTime = millis(); 
     radioTime = millis();
   }
 
   //LED
   if((millis() - ledTime) > ledPeriod && ledIsOn)
   { 
-    switch (RemoteState)
-    {
-    case 0:
-      setColor(0, 0, 0); // off led
-      break;
-    case 2:
-      setColor(0, 255, 0); // green led
-      break;
-    case 3:
-      setColor(255, 0, 0); // red led
-      break;
-    default:
-      setColor(0, 0, 0); // off led
-      break;
-    }
+    analogWrite(bluePin, 0);
     ledIsOn = false;
   }
 
@@ -433,5 +333,23 @@ void loop()
     ReadSensor();
     sensorTime = millis();
   }
+
+  if(mySerial.available()>0)
+  {
+    String a = mySerial.readString();
+    Serial.println(a);
+      if(a=="1")
+    {
+        analogWrite(greenPin, 255);
+        analogWrite(redPin, 0);
+    }
+    else
+    {
+      analogWrite(greenPin, 0);
+      analogWrite(redPin, 255);
+    }
+  }
+ 
+
 }
 
