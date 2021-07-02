@@ -1,0 +1,29 @@
+Success
+1
+----------------------------------------
+HEAD BIN: 11000000 192 C0
+ 
+AddH BIN: 10
+AddL BIN: 0
+Chan BIN: 25 -> 435MHz
+ 
+SpeedParityBit BIN    : 0 -> 8N1 (Default)
+SpeedUARTDataRate BIN : 11 -> 9600bps (default)
+SpeedAirDataRate BIN  : 100 -> 9.6kbps
+OptionTrans BIN       : 0 -> Transparent transmission (default)
+OptionPullup BIN      : 1 -> TXD, RXD, AUX are push-pulls/pull-ups
+OptionWakeup BIN      : 0 -> 250ms (default)
+OptionFEC BIN         : 1 -> Turn on Forward Error Correction Switch (Default)
+OptionPower BIN       : 1 -> 17dBm
+----------------------------------------
+Save mode returned not recognized!
+11
+----------------------------------------
+HEAD BIN: 1000001 65 41
+Freq.: 53
+Version  : 33
+Features : 32
+----------------------------------------
+
+
+
