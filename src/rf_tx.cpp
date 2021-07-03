@@ -76,6 +76,7 @@ bool sensorInit()
   // the minimum timing budget is 20 ms for short distance mode and 33 ms for
   // medium and long distance modes. See the VL53L1X datasheet for more
   // information on range and timing limits.
+  
   sensor.setDistanceMode(VL53L1X::Medium);
   sensor.setMeasurementTimingBudget(laserReadsPeriod * 100);
 
