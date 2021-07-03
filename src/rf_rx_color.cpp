@@ -681,14 +681,18 @@ void ReadRadio()
 
           tft.setTextSize (1);
           tft.setTextColor(BLACK);
-          tft.print(utf8rus(F("Среднее:")));
+          tft.print(utf8rus(F("Уср:")));
           tft.print(data1.level);
-          tft.print(utf8rus(F(" Показание:")));
+          tft.print(utf8rus(F(" Тек:")));
           tft.print(data1.lastread);
-          tft.print(utf8rus(F(" Сигнал:")));
-          tft.print(data1.signal);
-          tft.print(utf8rus(F(" Шум:")));
-          tft.println(data1.ambient);
+          //tft.print(utf8rus(F(" Сиг:")));
+          //tft.print(data1.signal);
+          //tft.print(utf8rus(F(" Шум:")));
+          //tft.println(data1.ambient);
+          tft.print(utf8rus(F(" FP:")));
+          tft.print(data1.flowpulses);
+          tft.print(utf8rus(F(" LH:")));
+          tft.println(data1.litershour);
           tft.fillRect(290,230,30,10,WHITE);
         }
         else
@@ -700,6 +704,14 @@ void ReadRadio()
           tft.setTextSize (1);
           tft.setTextColor(BLACK);
           tft.print(utf8rus(F("Уровень 0!!!")));
+          tft.print(utf8rus(F(" Сиг:")));
+          tft.print(data1.signal);
+          tft.print(utf8rus(F(" Шум:")));
+          tft.println(data1.ambient);
+          tft.print(utf8rus(F(" FP:")));
+          tft.print(data1.flowpulses);
+          tft.print(utf8rus(F(" LH:")));
+          tft.println(data1.litershour);
         }
       } 
       mySerial.flush();

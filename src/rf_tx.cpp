@@ -8,7 +8,7 @@
 SoftwareSerial mySerial(10, 9); // RX, TX
 
 unsigned long radioTime;
-unsigned long radioPeriod = 5000; //millisecs
+unsigned long radioPeriod = 2500; //millisecs
 
 //data for send to radio
 struct senddata
@@ -25,10 +25,10 @@ senddata data;
 int status;
 bool sensorError = false;
 //sensor reading timer
-unsigned long laserReadsPeriod = 2000; //in milliseconds, 2 second by default, sensor internal timer
+unsigned long laserReadsPeriod = 1000; //in milliseconds, 2 second by default, sensor internal timer
 
 //flowmeter
-int hallPin = 10;
+int hallPin = 11;
 volatile int NbTopsFlow; //measuring the rising edges of the signal
 int Calc;         
 unsigned long flowTime;
@@ -151,6 +151,7 @@ void setup()
 }
 void RadioSend()
 {
+  Serial.println(data.flowpulses);
     mySerial.write((byte*)&data,sizeof(data));
     data.flowpulses = 0;
     analogWrite(bluePin, 255);
@@ -187,11 +188,16 @@ void ReadSensor()
   if(!sensor.ranging_data.range_status)
   {
     data.lastread = sensor.ranging_data.range_mm;
-    readSum = readSum - readings[readIndex];// Remove the oldest entry from the sum
-    readings[readIndex] = data.lastread;// Add the newest reading to the window
-    readSum = readSum + data.lastread; // Add the newest reading to the sum
-    readIndex = ( readIndex + 1 ) % WINDOW_SIZE;// Increment the index, and wrap to 0 if it exceeds the window size
-    data.level = readSum / WINDOW_SIZE;
+    readings[readIndex] = data.lastread;// Remove the oldest entry from the sum
+    readIndex+=1;
+    if(readIndex>=WINDOW_SIZE)
+      readIndex = 0;
+    
+    for(int i = 0; i<WINDOW_SIZE;i++){
+        readSum = readSum+readings[i];
+    }
+    data.level =sensor.ranging_data.range_mm;// readSum / WINDOW_SIZE; 
+    readSum = 0;
     data.ambient = sensor.ranging_data.ambient_count_rate_MCPS;
     data.signal = sensor.ranging_data.peak_signal_count_rate_MCPS;
   //  Serial.print("range: ");
