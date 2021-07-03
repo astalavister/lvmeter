@@ -30,14 +30,17 @@ struct senddata
     unsigned int lastread;
     float ambient;
     float signal;
+    unsigned int flowpulses;
+    unsigned int litershour;
 };
 byte ackdata = 0;
 
 unsigned int SensorErrors = 0;
-int MaxErrors = 6; //
+unsigned int MaxErrors = 6; //
 bool IgnoreSensorError = false;
 unsigned long wlevel = 0;
 bool sensorActive = false;
+
 
 ///KEYBOARD
 const byte ROWS = 4; // строки
@@ -208,7 +211,6 @@ void drawBorder ()
   tft.fillScreen(WHITE);
   //tft.fillRect(border, border, (width - border * 2), (height - border * 2), WHITE);
 }
-
 /* Recode russian fonts from UTF-8 to Windows-1251 */
 String utf8rus(String source)
 {
@@ -242,12 +244,6 @@ String utf8rus(String source)
   }
 return target;
 }
-//float flowRate;
-//unsigned long flowMilliLitres;
-//unsigned long totalMilliLitres;
-//bool ledState = true;
-//unsigned long oldFlowTime;
-
 void SetupPicture()
 {
 
@@ -322,8 +318,6 @@ void SetupPicture()
 
 
 }
-
-
 void DisplayStatus()
 {
 
@@ -606,7 +600,6 @@ void radioInit()
   Serial.println( "Wireless initialized!" );
   tone(Beep, 4000, 100); 
 }
-
 void setup() 
 {
     Serial.begin(115200);  // debug port
@@ -652,7 +645,6 @@ void setup()
     timenow = millis(); 
     lcdbacktimenow = millis();
 }
-
 void SendRadio()
 {
   if ( millis() - radiosendtime > radiosendinterval )
@@ -732,7 +724,6 @@ void ReadRadio()
     wlevel = 0;
   }
 }
-
 void loop() 
 {
   // read keyboard in every loop, we need to do something
@@ -757,7 +748,7 @@ void loop()
   //show on display (1 sec timer)
   if(millis() - timenow > showtime) 
   {
-    if(secondsToStop>0)
+    if(secondsToStop > 0)
       secondsToStop--;
     DisplayStatus();
     timenow = millis();
@@ -786,5 +777,3 @@ void loop()
     }
   }
 }
-
-
