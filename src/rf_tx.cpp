@@ -21,7 +21,7 @@ bool sensorError = false;
 
 //flowmeter
 int hallPin = 2;
-volatile int NbTopsFlow; //measuring the rising edges of the signal
+volatile unsigned int flowPulses; //measuring the rising edges of the signal
 
 //RGB led
 int redPin= A0;
@@ -30,22 +30,20 @@ int bluePin = A2;
 const byte rgbPins[3] = { A0, A1, A2 };
 bool ledIsOn = false;
 
-//led blink time
+//blue led blink time
 unsigned long ledTime;
 unsigned long ledPeriod = 250; //ms
-bool ledState = true;
+bool ledState = false;
 
 //loop counter
 unsigned long sensorTime;
 unsigned long laserReadsInterval = 1000;   // in milliseconds
 
-unsigned int sendErrors = 0; 
 byte RemoteState = 0;
 VL53L1X sensor;
 
 bool sensorInit()
 {
-
   sensor.setTimeout(1000);
   if (!sensor.init())
   {
@@ -57,14 +55,13 @@ bool sensorInit()
   // the minimum timing budget is 20 ms for short distance mode and 33 ms for
   // medium and long distance modes. See the VL53L1X datasheet for more
   // information on range and timing limits.
-  
   sensor.setDistanceMode(VL53L1X::Medium);
   sensor.setMeasurementTimingBudget(laserReadsPeriod * 100);
-
   // Start continuous readings at a rate of one measurement every 50 ms (the
   // inter-measurement period). This period should be at least as long as the
   // timing budget.
   sensor.startContinuous(laserReadsPeriod);
+  sensorError = false;
   return true;
 }
 
@@ -82,7 +79,7 @@ void radioInit()
 
 void rpm ()     //This is the function that the interupt calls 
 { 
-  NbTopsFlow++;  //This function measures the rising and 
+  flowPulses++;  //This function measures the rising and 
   //falling edge of the hall effect sensors signal
 } 
 
@@ -124,8 +121,8 @@ void setup()
 }
 void RadioSend()
 {
-    data.flowpulses = NbTopsFlow;
-    NbTopsFlow = 0; // Reset Counter
+    data.flowpulses = flowPulses;
+    flowPulses = 0; // Reset Counter
     Serial.print("Pulse: ");
     Serial.println(data.flowpulses);
     mySerial.write((byte*)&data,sizeof(data));
@@ -148,7 +145,6 @@ bool ReadSensor()
     }
   }
   sensor.read();
-
   /*Serial.print("range: ");
   Serial.print(sensor.ranging_data.range_mm);
   Serial.print("\tstatus: ");
@@ -158,31 +154,30 @@ bool ReadSensor()
   Serial.print("\tambient: ");
   Serial.print(sensor.ranging_data.ambient_count_rate_MCPS);
   Serial.print("\tavg: ");
-  Serial.println(avg);*/
-  
-  //Serial.println(); 
-
+  Serial.println(avg);
+  */
   if(!sensor.ranging_data.range_status)
   {
     data.level = sensor.ranging_data.range_mm;// readSum / WINDOW_SIZE; 
     data.ambient = sensor.ranging_data.ambient_count_rate_MCPS;
     data.signal = sensor.ranging_data.peak_signal_count_rate_MCPS;
     return true;
-  //  Serial.print("range: ");
-  //Serial.print(sensor.ranging_data.range_mm);
-  //Serial.print("\tstatus: ");
-  //Serial.println(sensor.ranging_data.range_status);
+    //Serial.print("range: ");
+    //Serial.print(sensor.ranging_data.range_mm);
+    //Serial.print("\tstatus: ");
+    //Serial.println(sensor.ranging_data.range_status);
   } return false;
 }
 
 void loop() 
 {
   //LED
-  if((millis() - ledTime) > ledPeriod && ledIsOn)
+  if(ledIsOn && (millis() - ledTime) > ledPeriod )
   { 
-    analogWrite(bluePin, 0);
     ledIsOn = false;
+    analogWrite(bluePin, 0);
   }
+
   //SENSOR
   if((millis() - sensorTime) > laserReadsInterval)
   { 
@@ -190,6 +185,8 @@ void loop()
       RadioSend();  
     sensorTime = millis();
   }
+
+  //REMOTE DATA
   if(mySerial.available() > 0)
   {
     String a = mySerial.readString();
