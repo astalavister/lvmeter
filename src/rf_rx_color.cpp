@@ -27,12 +27,11 @@ SWTFT tft;
 struct senddata
 {
     unsigned int level;
-    unsigned int lastread;
     float ambient;
     float signal;
     unsigned int flowpulses;
-    unsigned int litershour;
 };
+
 byte ackdata = 0;
 
 unsigned int SensorErrors = 0;
@@ -40,6 +39,22 @@ unsigned int MaxErrors = 6; //
 bool IgnoreSensorError = false;
 unsigned long wlevel = 0;
 bool sensorActive = false;
+
+//avg level
+const int numReadings = 10;
+
+int readings[numReadings];      // the readings from the flow input
+int readIndex = 0;              // the index of the current reading
+int total = 0;                  // the running total
+int average = 0;                // the average
+
+
+//flow sensor
+volatile int flow_frequency; // flow sensor pulses
+// Calculated litres/hour
+float watervolume = 0.0, l_minute;
+unsigned long cloopTime;
+
 
 
 ///KEYBOARD
@@ -63,8 +78,8 @@ unsigned long showtime = 1000;
 //time radio read
 unsigned long radiotimeerrors = 0;
 unsigned long radiotimelastreceived = 0;
-unsigned long radiointerval = 5000; 
-unsigned long radiosendinterval = 5000; 
+unsigned long radiointerval = 1000; 
+unsigned long radiosendinterval = 2000; 
 unsigned long radiosendtime = 0; 
 
 //beep on error
@@ -198,6 +213,8 @@ void TryToOnRelay()
         // do real relay on here
         RelayOn();
         relayOnEvents = 0;//reset counter
+        flow_frequency = 0;
+        watervolume = 0;
       }
       tryToOnTime = millis();
   }
@@ -602,6 +619,12 @@ void radioInit()
 }
 void setup() 
 {
+
+    for (int thisReading = 0; thisReading < numReadings; thisReading++) 
+    {
+      readings[thisReading] = 0;
+    }
+
     Serial.begin(115200);  // debug port
     mySerial.begin(2400); // lora serial port
     lelevtooffrelay = GetUpLevel(); 
@@ -658,7 +681,7 @@ void SendRadio()
 void ReadRadio()
 {
   // If data available
-  if (mySerial.available()==sizeof(senddata)) 
+  if (mySerial.available() == sizeof(senddata)) 
   {
 	    // read message
       senddata data1;
@@ -667,24 +690,46 @@ void ReadRadio()
         radiotimelastreceived = millis();
         
         tft.fillRect(5,230,300,10,WHITE);
-
-        if(data1.level!=0)
+        if(data1.flowpulses > 0)
         {
-          wlevel = data1.level/10; //convert to CM from received MM
-          Serial.println(wlevel);
+          flow_frequency += data1.flowpulses;
+          data1.flowpulses = 0;
+        }
+        if(data1.level > 0)
+        {
           SensorErrors = 0; 
           sensorActive = true;
           IgnoreSensorError = false;
-        
+          
+          // subtract the last reading:
+          total = total - readings[readIndex];
+          // data from the sensor:
+          readings[readIndex] = data1.level;
+          // add the reading to the total:
+          total = total + readings[readIndex];
+          // advance to the next position in the array:
+          readIndex = readIndex + 1;
+          // if we're at the end of the array...
+          if (readIndex >= numReadings) 
+          {
+            //wrap around to the beginning:
+            readIndex = 0;
+          }
+          // calculate the average:
+          average = total / numReadings;
+
+          wlevel = average / 10; //convert to CM from received MM
+          //Serial.println(wlevel);
+       
           tft.fillCircle(300,20,12,GREEN);
           tft.setCursor (5, 230);
 
           tft.setTextSize (1);
           tft.setTextColor(BLACK);
           tft.print(utf8rus(F("Уср:")));
-          tft.print(data1.level);
+          tft.print(average);
           tft.print(utf8rus(F(" Тек:")));
-          tft.print(data1.lastread);
+          tft.print(data1.level);
           //tft.print(utf8rus(F(" Сиг:")));
           //tft.print(data1.signal);
           //tft.print(utf8rus(F(" Шум:")));
@@ -692,7 +737,7 @@ void ReadRadio()
           tft.print(utf8rus(F(" FP:")));
           tft.print(data1.flowpulses);
           tft.print(utf8rus(F(" LH:")));
-          tft.println(data1.litershour);
+          tft.println(0);
           tft.fillRect(290,230,30,10,WHITE);
         }
         else
@@ -711,7 +756,7 @@ void ReadRadio()
           tft.print(utf8rus(F(" FP:")));
           tft.print(data1.flowpulses);
           tft.print(utf8rus(F(" LH:")));
-          tft.println(data1.litershour);
+          tft.println(0);
         }
       } 
       mySerial.flush();
@@ -740,12 +785,36 @@ void loop()
 {
   // read keyboard in every loop, we need to do something
   keypad.getKey();//scan keyboard for events
-  //relay data for remote side
-  ackdata = curRelayState ? 1  : 0; //2 if 0n, 3 if Off
 
+  //relay data for remote side
+  ackdata = curRelayState ? 1 : 0; 
 
   ReadRadio();
   SendRadio();
+
+    // Every second, calculate and print litres/hour
+  if(millis() >= (cloopTime + 1000) && curRelayState)
+  {
+    cloopTime = millis(); // Updates cloopTime
+    if(flow_frequency != 0)
+    {
+      // Pulse frequency (Hz) = 7.5Q, Q is flow rate in L/min.
+      Serial.print("FREQ: ");
+      Serial.print(flow_frequency);
+      l_minute = (flow_frequency / 7.5); // (Pulse frequency x 60 min) / 7.5Q = flowrate in L/hour
+      Serial.print(" Rate: ");
+      Serial.print(l_minute);
+      Serial.println(" L/M");
+      l_minute = l_minute/60;
+      watervolume = watervolume + l_minute;
+      Serial.print("Vol: ");
+      Serial.print(watervolume);
+      Serial.println(" L");
+      flow_frequency = 0; // Reset Counter
+      Serial.print(l_minute, DEC); // Print litres/hour
+      Serial.println(" L/Sec");
+    }
+  }
 
   //beep if no sensor data && !ignore errors
   if(!sensorActive && !IgnoreSensorError)
